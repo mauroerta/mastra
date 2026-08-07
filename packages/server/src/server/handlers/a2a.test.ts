@@ -1,13 +1,12 @@
 import * as crypto from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import type { Task, MessageSendParams } from '@mastra/core/a2a';
-import { MastraA2AError } from '@mastra/core/a2a';
+import { MastraA2AError, canonicalizeAgentCard } from '@mastra/core/a2a';
 import type { AgentConfig } from '@mastra/core/agent';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
-import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultPushNotificationSender, DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
@@ -261,11 +260,9 @@ describe('A2A Handler', () => {
       expect(agentCard.signatures).toHaveLength(1);
 
       const [signature] = agentCard.signatures!;
-      const unsignedCard = structuredClone(agentCard) as typeof agentCard & {
-        signatures?: typeof agentCard.signatures;
-      };
-      delete unsignedCard.signatures;
-      const canonicalPayload = canonicalize(unsignedCard);
+      // The signer canonicalizes via the A2A SDK's canonicalizeAgentCard (which
+      // strips signatures itself), so the verification path must use the same.
+      const canonicalPayload = canonicalizeAgentCard(agentCard);
 
       expect(canonicalPayload).toBeTruthy();
 
@@ -284,9 +281,61 @@ describe('A2A Handler', () => {
       expect(JSON.parse(Buffer.from(signature.protected, 'base64url').toString('utf8'))).toMatchObject({
         alg: 'ES256',
         kid: 'test-key',
+        // The signer defaults `typ` to "JOSE" so cards verify against v1 peers.
+        typ: 'JOSE',
       });
       expect(signature.header).toEqual({
         issuer: 'mastra-test',
+      });
+    });
+
+    it('canonicalizes the served card via the A2A SDK (cross-implementation signature interop)', async () => {
+      // The signing bug this guards against: signing over plain JCS of the raw
+      // card diverges from the SDK's canonicalizeAgentCard (which round-trips
+      // through the v1 schema and drops empty/default fields), so signatures
+      // would not verify against SDK-based v1 peers. The sibling test above
+      // proves the signature is computed over canonicalizeAgentCard(card); here
+      // we pin that canonicalizeAgentCard is what the handler's signer used by
+      // reconstructing and verifying the exact signing input.
+      const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
+        namedCurve: 'P-256',
+      });
+
+      mockMastra.setServer({
+        a2a: {
+          agentCardSigning: {
+            privateKey: privateKey.export({ format: 'jwk' }),
+            protectedHeader: { alg: 'ES256', kid: 'test-key' },
+          },
+        },
+      } as any);
+
+      const agentCard = await getAgentCardByIdHandler({
+        mastra: mockMastra,
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+      });
+
+      const [signature] = agentCard.signatures!;
+      // Reconstruct the signing input using the SDK canonicalization and verify
+      // the handler's signature against it. If the handler had used a different
+      // canonicalization (e.g. plain JCS), this verification would fail.
+      const signingInput = `${signature.protected}.${Buffer.from(canonicalizeAgentCard(agentCard), 'utf8').toString(
+        'base64url',
+      )}`;
+      const verified = crypto.verify(
+        'sha256',
+        Buffer.from(signingInput, 'utf8'),
+        { key: publicKey, dsaEncoding: 'ieee-p1363' },
+        Buffer.from(signature.signature, 'base64url'),
+      );
+
+      expect(verified).toBe(true);
+      // The protected header carries `typ`, which the SDK verifier requires.
+      expect(JSON.parse(Buffer.from(signature.protected, 'base64url').toString('utf8'))).toMatchObject({
+        alg: 'ES256',
+        kid: 'test-key',
+        typ: 'JOSE',
       });
     });
   });
@@ -703,6 +752,38 @@ describe('A2A Handler', () => {
       // -32602 is the JSON-RPC "invalid params" code that MastraA2AError.invalidParams produces.
       // @ts-expect-error - error is present in the failure branch
       expect(result.error.code).toBe(-32602);
+    });
+
+    it('should reject data parts with a content-type error, not a generic internal error', async () => {
+      // Data parts are valid v1 wire parts (they pass schema validation) but have
+      // no CoreMessage equivalent. convertToCoreMessage rejects them with
+      // MastraA2AError.contentTypeNotSupported (-32005) rather than a raw Error,
+      // which would otherwise normalize to the generic internalError -32603.
+      const requestId = 'test-request-id';
+      const agentId = 'test-agent';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId: 'test-message-id',
+          role: 'ROLE_USER',
+          parts: [{ data: { invoice: 42 } }],
+        },
+      };
+
+      const result = await getAgentExecutionHandler({
+        requestId,
+        mastra: mockMastra,
+        method: 'message/send',
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect('error' in result).toBe(true);
+      // -32005 is the JSON-RPC code MastraA2AError.contentTypeNotSupported produces.
+      // @ts-expect-error - error is present in the failure branch
+      expect(result.error.code).toBe(-32005);
     });
 
     it('should handle errors from agent.generate and save failed state', async () => {

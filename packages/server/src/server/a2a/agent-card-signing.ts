@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
+import { canonicalizeAgentCard } from '@mastra/core/a2a';
 import type { AgentCard, AgentCardSignature } from '@mastra/core/a2a';
 import type { A2AAgentCardSigningConfig } from '@mastra/core/server';
-import canonicalize from 'canonicalize';
 
 const SUPPORTED_JWS_ALGORITHMS = new Set<string>([
   'ES256',
@@ -14,13 +14,6 @@ const SUPPORTED_JWS_ALGORITHMS = new Set<string>([
   'PS384',
   'PS512',
 ]);
-
-function stripAgentCardSignatures(agentCard: AgentCard): Omit<AgentCard, 'signatures'> {
-  // v1's AgentCard types `signatures` as required, so drop it via destructuring
-  // rather than `delete` (which TS rejects on a non-optional property).
-  const { signatures: _signatures, ...unsignedCard } = structuredClone(agentCard);
-  return unsignedCard;
-}
 
 function importSigningKey(signing: A2AAgentCardSigningConfig) {
   const { privateKey } = signing;
@@ -43,6 +36,11 @@ function getProtectedHeader(signing: A2AAgentCardSigningConfig): Record<string, 
   }
 
   return {
+    // A2A v1 verifiers (including the @a2a-js/sdk verifier) require `typ` in the
+    // protected header. Default it to "JOSE" when the caller doesn't set one so
+    // signed cards verify against other v1 implementations; a configured `typ`
+    // is preserved.
+    typ: 'JOSE',
     ...rest,
     alg,
   };
@@ -79,7 +77,11 @@ export async function signAgentCard({
   agentCard: AgentCard;
   signing: A2AAgentCardSigningConfig;
 }): Promise<AgentCard> {
-  const canonicalPayload = canonicalize(stripAgentCardSignatures(agentCard));
+  // Canonicalize via the A2A SDK's canonicalizeAgentCard (spec §8.4.1). It
+  // round-trips the card through the v1 schema and strips `signatures`, so the
+  // bytes match what SDK-based v1 peers sign/verify. Plain JCS over the raw card
+  // would diverge (it keeps empty/default fields the SDK drops).
+  const canonicalPayload = canonicalizeAgentCard(agentCard);
 
   if (!canonicalPayload) {
     throw new Error('Failed to canonicalize A2A Agent Card for signing');

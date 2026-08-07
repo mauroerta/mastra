@@ -37,3 +37,5 @@ for await (const event of stream) {
   if ('artifact' in event) console.log(event.artifact.parts);
 }
 ```
+
+Agent card signature verification (`getAgentCard({ verifySignature })`) now canonicalizes cards the same way as other A2A v1 implementations, so it correctly verifies signatures produced by v1 agents.

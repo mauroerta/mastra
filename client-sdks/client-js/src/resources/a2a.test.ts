@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AgentCard, TaskPushNotificationConfig } from '@mastra/core/a2a/client';
-import canonicalize from 'canonicalize';
+import { canonicalizeAgentCard } from '@mastra/core/a2a/client';
 import { CompactSign, base64url, exportJWK } from 'jose';
 import { describe, it, beforeEach, afterEach, expect, expectTypeOf } from 'vitest';
 import { MastraClientError } from '../types';
@@ -49,7 +49,7 @@ describe('A2A', () => {
       const { privateKey, publicKey } = generateKeyPairSync('ec', {
         namedCurve: 'P-256',
       });
-      const canonicalPayload = canonicalize(card);
+      const canonicalPayload = canonicalizeAgentCard(card);
 
       if (!canonicalPayload) {
         throw new Error('Failed to canonicalize test Agent Card');
@@ -59,6 +59,7 @@ describe('A2A', () => {
         .setProtectedHeader({
           alg: 'ES256',
           kid: 'test-key',
+          typ: 'JOSE',
           jku: 'https://example.com/.well-known/jwks.json',
         })
         .sign(privateKey);

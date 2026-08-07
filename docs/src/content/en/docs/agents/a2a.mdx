@@ -275,6 +275,17 @@ const remoteWeatherAgent = new A2AAgent({
 
 Use this hook to enforce expected providers, expected endpoints, certificate-bound identities, signed cards, or other trust requirements before a parent agent delegates to the remote agent.
 
+## Not yet supported
+
+Mastra implements the required A2A v1 methods and data model, plus streaming, push notifications, and signed agent cards. These optional parts of the spec aren't supported yet:
+
+- Protocol extensions: an agent can't declare `AgentExtension` entries on its card, and the server doesn't read the `A2A-Extensions` header or enforce required extensions.
+- Authenticated extended agent card: `GetExtendedAgentCard` returns an error, and `capabilities.extendedAgentCard` is always `false`.
+- Security schemes on the served card: `securitySchemes` and `security` are served empty. Protect A2A endpoints with the server's auth layer instead.
+- `ListTasks` filtering by state, and opaque pagination tokens. The method filters by `contextId` and paginates by numeric offset.
+
+A Mastra agent produces the `submitted`, `working`, `completed`, `failed`, and `canceled` task states. It doesn't yet emit `input-required`, `auth-required`, or `rejected` from its own execution, though the client handles receiving those states from remote agents.
+
 ## Related
 
 - [Agent reference](/reference/agents/agent)

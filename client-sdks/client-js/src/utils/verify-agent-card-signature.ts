@@ -1,5 +1,5 @@
 import type { AgentCard, AgentCardSignature } from '@mastra/core/a2a';
-import canonicalize from 'canonicalize';
+import { canonicalizeAgentCard } from '@mastra/core/a2a/client';
 import { base64url, compactVerify, decodeProtectedHeader, importJWK, importSPKI, importX509 } from 'jose';
 import type { CryptoKey, JWK, ProtectedHeaderParameters } from 'jose';
 import { MastraClientError } from '../types';
@@ -37,16 +37,6 @@ export type VerifyAgentCardSignatureOptions = {
   ) => Promise<AgentCardVerificationKey | null | undefined> | AgentCardVerificationKey | null | undefined;
   algorithms?: string[];
 };
-
-function stripAgentCardSignatures(agentCard: AgentCard): AgentCard {
-  // A2A v1's AgentCard types `signatures` as a required field, so clone into a
-  // shape where it is optional before deleting it for canonicalization.
-  const unsignedCard = structuredClone(agentCard) as Omit<AgentCard, 'signatures'> & {
-    signatures?: AgentCardSignature[];
-  };
-  delete unsignedCard.signatures;
-  return unsignedCard as AgentCard;
-}
 
 function isCryptoKey(value: unknown): value is CryptoKey {
   const cryptoKeyConstructor = (globalThis as { CryptoKey?: new (...args: any[]) => unknown }).CryptoKey;
@@ -101,7 +91,12 @@ export async function verifyAgentCardSignatureIfPresent(
     return agentCard;
   }
 
-  const canonicalPayload = canonicalize(stripAgentCardSignatures(agentCard));
+  // Canonicalize via the A2A SDK's canonicalizeAgentCard (spec §8.4.1): it
+  // round-trips the card through the v1 schema (dropping non-v1 fields and
+  // protobuf-default values) and strips `signatures` before applying JCS.
+  // Both the signing and verification paths must use this same canonicalization,
+  // otherwise signatures produced by other v1 implementations won't verify.
+  const canonicalPayload = canonicalizeAgentCard(agentCard);
   if (!canonicalPayload) {
     throw new MastraClientError(200, 'OK', 'Failed to canonicalize A2A Agent Card for signature verification');
   }

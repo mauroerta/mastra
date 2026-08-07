@@ -1172,9 +1172,6 @@ importers:
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../../packages/schema-compat
-      canonicalize:
-        specifier: ^1.0.8
-        version: 1.0.8
       jose:
         specifier: ^6.2.1
         version: 6.2.3
@@ -6046,9 +6043,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)
-      canonicalize:
-        specifier: ^1.0.8
-        version: 1.0.8
       eslint:
         specifier: ^10.7.0
         version: 10.7.0(jiti@2.7.0)

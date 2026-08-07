@@ -87,6 +87,8 @@ function convertToCoreMessagePart(part: A2AWirePart) {
       mimeType: part.mediaType!,
     } as const;
   }
-  // Data parts have no CoreMessage equivalent.
-  throw new Error('Data parts are not supported in core messages');
+  // Data parts have no CoreMessage equivalent. Surface a spec-appropriate
+  // content-type error (-32005) instead of a raw Error, which would otherwise
+  // be normalized to a generic internalError (-32603).
+  throw MastraA2AError.contentTypeNotSupported('data');
 }
