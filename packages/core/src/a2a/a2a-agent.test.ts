@@ -274,6 +274,62 @@ describe('A2AAgent', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('interoperates with a legacy v0.3 agent card (top-level url, no supportedInterfaces)', async () => {
+    // A real v0.3 agent serves a card with a top-level `url` and no
+    // `supportedInterfaces`. The client must fall back to that url, treat the
+    // peer as v0.3, and speak the v0.3 wire (message/send + v0.3-shaped result).
+    const v03Card = {
+      name: 'Legacy Agent',
+      description: 'A v0.3 agent',
+      protocolVersion: '0.3.0',
+      url: 'https://legacy.example.com/a2a/legacy',
+      preferredTransport: 'JSONRPC',
+      additionalInterfaces: [{ url: 'https://legacy.example.com/a2a/legacy', transport: 'JSONRPC' }],
+      version: '1.0.0',
+      skills: [],
+      defaultInputModes: ['text/plain'],
+      defaultOutputModes: ['text/plain'],
+      capabilities: { streaming: false },
+    };
+
+    const fetchMock = createFetchMock([
+      new Response(JSON.stringify(v03Card), { status: 200 }),
+      (input, init) => {
+        // Endpoint comes from the card's top-level `url`, not supportedInterfaces.
+        expect(String(input)).toBe('https://legacy.example.com/a2a/legacy');
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        // v0.3 peer → v0.3 slash method + v0.3 message shape.
+        expect(body.method).toBe('message/send');
+        expect(body.params.message.role).toBe('user');
+        expect(body.params.message.parts[0]).toMatchObject({ kind: 'text' });
+        // v0.3-shaped result the client normalizes back to v1 internally.
+        return jsonRpcResult({
+          kind: 'task',
+          id: 'task-legacy',
+          contextId: 'ctx-legacy',
+          status: { state: 'completed' },
+          artifacts: [
+            {
+              artifactId: 'response:text',
+              name: 'response.txt',
+              parts: [{ kind: 'text', text: 'Legacy response' }],
+            },
+          ],
+        });
+      },
+    ]);
+
+    const remote = new A2AAgent({
+      url: 'https://legacy.example.com',
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const result = await remote.generate('Talk to the legacy agent');
+
+    expect(result.text).toBe('Legacy response');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('streams through the generated subagent tool when the parent agent uses stream mode', async () => {
     const fetchMock = createFetchMock([
       new Response(JSON.stringify(baseCard), { status: 200 }),

@@ -15,7 +15,7 @@ A2A endpoints accept both v1 and v0.3 requests. The server reads the `A2A-Versio
 
 **Client (`A2AAgent`)**
 
-`A2AAgent` reads a remote agent's card, selects a supported interface, and negotiates the protocol version. Its public API is unchanged:
+`A2AAgent` reads a remote agent's card, selects a supported interface, and negotiates the protocol version. It reads the endpoint from a v1 card's `supportedInterfaces`, and falls back to a legacy v0.3 card's top-level `url` so it interoperates with real v0.3 agents. Its public API is unchanged:
 
 ```ts
 import { A2AAgent } from '@mastra/core/a2a';

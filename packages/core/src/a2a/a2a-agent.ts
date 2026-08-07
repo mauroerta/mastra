@@ -504,24 +504,33 @@ async function requireResponseBody(response: Response, operation: string) {
 }
 
 /**
- * Select the interface the client should call from a v1 AgentCard. Prefers a
- * JSONRPC interface (the transport this client speaks), falling back to the
- * first advertised interface. The chosen interface's `protocolVersion` tells us
- * whether the peer is v1 ('1.0') or legacy ('0.3'); v1 is assumed when the
- * version is absent/unknown since it is the current protocol.
+ * Select the interface the client should call from an AgentCard. For a v1 card,
+ * prefers a JSONRPC entry in `supportedInterfaces` (falling back to the first
+ * entry); its `protocolVersion` sets the peer version ('0.3' vs '1.0', defaulting
+ * to '1.0' when absent). For a legacy v0.3 card — which has no `supportedInterfaces`
+ * and instead carries a top-level `url` (+ `preferredTransport`) — falls back to
+ * that `url` and treats the peer as v0.3. This lets the client interoperate with
+ * real v0.3 agents, not just v1 cards that happen to advertise a legacy interface.
  */
 function selectInterface(card: AgentCard): { executionUrl: string; peerVersion: PeerVersion } {
   const interfaces: AgentInterface[] = Array.isArray(card.supportedInterfaces) ? card.supportedInterfaces : [];
 
   const preferred = interfaces.find(iface => iface.protocolBinding?.toUpperCase() === 'JSONRPC') ?? interfaces[0];
 
-  if (!preferred?.url) {
-    throw MastraA2AError.invalidAgentResponse('Remote A2A agent card does not advertise a callable interface.');
+  if (preferred?.url) {
+    const peerVersion: PeerVersion = preferred.protocolVersion === '0.3' ? '0.3' : '1.0';
+    return { executionUrl: preferred.url, peerVersion };
   }
 
-  const peerVersion: PeerVersion = preferred.protocolVersion === '0.3' ? '0.3' : '1.0';
+  // v0.3 card fallback: no `supportedInterfaces`, endpoint is the top-level `url`.
+  // These fields are absent from the v1 AgentCard type but present on the wire
+  // when a v0.3 agent serves its card, so read them through a narrow view.
+  const legacyUrl = (card as { url?: unknown }).url;
+  if (typeof legacyUrl === 'string' && legacyUrl.length > 0) {
+    return { executionUrl: legacyUrl, peerVersion: '0.3' };
+  }
 
-  return { executionUrl: preferred.url, peerVersion };
+  throw MastraA2AError.invalidAgentResponse('Remote A2A agent card does not advertise a callable interface.');
 }
 
 export class A2AAgent implements SubAgent {
