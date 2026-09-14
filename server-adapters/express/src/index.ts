@@ -18,6 +18,8 @@ import {
 import type { Application, NextFunction, Request, Response } from 'express';
 export { createAuthMiddleware } from './auth-middleware';
 export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
+export { mastraJsonBodyParser } from './json-body-middleware';
+export type { MastraJsonBodyParserOptions } from './json-body-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
@@ -34,6 +36,16 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
       });
   }
   return _hasPermissionPromise;
+}
+
+/**
+ * Whether a request body should be treated as JSON. Accepts the literal `application/json`
+ * and any structured `+json` suffix media type (RFC 6839), e.g. the A2A v1 wire type
+ * `application/a2a+json`.
+ */
+function isJsonRequestBody(contentType: string | undefined | null): boolean {
+  if (!contentType) return false;
+  return contentType.includes('application/json') || contentType.includes('+json');
 }
 
 /**
@@ -85,7 +97,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Parse request context from request body (POST/PUT)
       if (req.method === 'POST' || req.method === 'PUT') {
         const contentType = req.headers['content-type'];
-        if (contentType?.includes('application/json') && req.body) {
+        if (isJsonRequestBody(contentType) && req.body) {
           if (req.body.requestContext) {
             bodyRequestContext = req.body.requestContext;
           }

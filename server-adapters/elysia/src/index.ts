@@ -24,6 +24,18 @@ export type { ElysiaAuthMiddlewareOptions } from './auth-middleware';
 export { getMastraOpenAPIDoc, clearMastraOpenAPICache } from './helper';
 
 /**
+ * Whether a request body should be parsed as JSON.
+ *
+ * Matches `application/json` plus any structured `+json` suffix media type (RFC 6839),
+ * e.g. the A2A v1 wire type `application/a2a+json`. Without the `+json` branch, v1 A2A
+ * requests would slip past the body parser and reach handlers with an empty body.
+ */
+function isJsonRequestBody(contentType: string | undefined | null): boolean {
+  if (!contentType) return false;
+  return contentType.includes('application/json') || contentType.includes('+json');
+}
+
+/**
  * Normalizes route path parameters to position-based names (:p0, :p1, ...)
  * to avoid Elysia router conflicts when different routes use different
  * parameter names at the same path segment position (e.g. :agentId vs
@@ -168,7 +180,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       // Parse request context from request body (POST/PUT/PATCH)
       if (ctx.request.method === 'POST' || ctx.request.method === 'PUT' || ctx.request.method === 'PATCH') {
         const contentType = ctx.request.headers.get('content-type');
-        if (contentType?.includes('application/json')) {
+        if (isJsonRequestBody(contentType)) {
           try {
             const body = (ctx.body ?? (await ctx.request.clone().json())) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
@@ -332,7 +344,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
           };
         }
-      } else if (contentType.includes('application/json')) {
+      } else if (isJsonRequestBody(contentType)) {
         const clonedReq = request.clone();
         const bodyText = await clonedReq.text();
 
@@ -590,12 +602,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
             };
           }
-        } else if (contentType.includes('application/json')) {
+        } else if (isJsonRequestBody(contentType)) {
           // Elysia pre-parses JSON body
           body = ctx.body;
 
           // Validate that body is valid JSON if provided
-          if (body === undefined && contentType.includes('application/json')) {
+          if (body === undefined) {
             const bodyText = await ctx.request.clone().text();
             if (bodyText && bodyText.trim().length > 0) {
               try {
