@@ -71,14 +71,14 @@ Open the Express entry file at `src/index.ts` and add the required import and in
 
 ```typescript {2-3,11-12} title="src/index.ts"
 import express, { type Request, type Response } from 'express'
-import { MastraServer } from '@mastra/express'
+import { MastraServer, mastraJsonBodyParser } from '@mastra/express'
 import { mastra } from './mastra'
 
 const app = express()
 const PORT = process.env.PORT || 3000
 
 // Middleware
-app.use(express.json())
+app.use(mastraJsonBodyParser())
 
 const server = new MastraServer({ app, mastra })
 await server.init()
@@ -94,7 +94,7 @@ app.listen(PORT, () => {
 })
 ```
 
-The ⁠`MastraServer` is initialized with the existing Express `app` and the root ⁠`mastra` instance. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.
+The ⁠`MastraServer` is initialized with the existing Express `app` and the root ⁠`mastra` instance. `mastraJsonBodyParser()` parses JSON request bodies, including A2A Protocol v1.0's `application/a2a+json`. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.
 
 ## Test your agent
 

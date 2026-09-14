@@ -137,11 +137,11 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
   <TabItem value="express" label="Express">
     ```typescript {8} title="src/express-server.ts"
     import express from 'express'
-    import { MastraServer } from '@mastra/express'
+    import { MastraServer, mastraJsonBodyParser } from '@mastra/express'
     import { mastra } from './mastra'
 
     const app = express()
-    app.use(express.json())
+    app.use(mastraJsonBodyParser())
 
     const server = new MastraServer({ app, mastra })
 
@@ -205,14 +205,13 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
   </TabItem>
 
   <TabItem value="koa" label="Koa">
-    ```typescript {9} title="src/koa-server.ts"
+    ```typescript {8} title="src/koa-server.ts"
     import Koa from 'koa'
-    import bodyParser from 'koa-bodyparser'
-    import { MastraServer } from '@mastra/koa'
+    import { MastraServer, mastraJsonBodyParser } from '@mastra/koa'
     import { mastra } from './mastra'
 
     const app = new Koa()
-    app.use(bodyParser()) // Required for body parsing
+    app.use(mastraJsonBodyParser())
 
     const server = new MastraServer({ app, mastra })
 

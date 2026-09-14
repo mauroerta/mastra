@@ -25,11 +25,11 @@ npm install @mastra/express@latest express
 
 ```typescript title="server.ts"
 import express from 'express'
-import { MastraServer } from '@mastra/express'
+import { MastraServer, mastraJsonBodyParser } from '@mastra/express'
 import { mastra } from './mastra'
 
 const app = express()
-app.use(express.json()) // Required for body parsing
+app.use(mastraJsonBodyParser()) // Parses JSON bodies, including A2A v1's `application/a2a+json`
 
 const server = new MastraServer({ app, mastra })
 await server.init()
@@ -41,7 +41,7 @@ app.listen(4111, () => {
 
 :::note
 
-Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
+Express doesn't parse request bodies on its own, and a plain `express.json()` accepts only `application/json`. `mastraJsonBodyParser()` also parses A2A Protocol v1.0 requests, which arrive as `application/a2a+json`. Without it, those requests fail with `Method not found: undefined`. Add the parser before creating the `MastraServer`. To use your own `express.json()` instead, set `type: ['application/json', 'application/*+json']`.
 
 :::
 
@@ -122,7 +122,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 
 | Aspect | Express | Hono |
 | - | - | - |
-| Body parsing | Requires `express.json()` | Handled by framework |
+| Body parsing | Requires `mastraJsonBodyParser()` | Handled by framework |
 | Context storage | `res.locals` | `c.get()` / `c.set()` |
 | Middleware signature | `(req, res, next)` | `(c, next)` |
 | Streaming | `res.write()` / `res.end()` | `stream()` helper |

@@ -18,19 +18,18 @@ The `@mastra/koa` package provides a server adapter for running Mastra with [Koa
 Install the Koa adapter and Koa framework:
 
 ```bash npm2yarn
-npm install @mastra/koa@latest koa koa-bodyparser
+npm install @mastra/koa@latest koa
 ```
 
 ## Usage example
 
 ```typescript title="server.ts"
 import Koa from 'koa'
-import bodyParser from 'koa-bodyparser'
-import { MastraServer } from '@mastra/koa'
+import { MastraServer, mastraJsonBodyParser } from '@mastra/koa'
 import { mastra } from './mastra'
 
 const app = new Koa()
-app.use(bodyParser())
+app.use(mastraJsonBodyParser()) // Parses JSON bodies, including A2A v1's `application/a2a+json`
 
 const server = new MastraServer({ app, mastra })
 
@@ -40,6 +39,12 @@ app.listen(3000, () => {
   console.log('Server running on http://localhost:3000')
 })
 ```
+
+:::note
+
+Koa doesn't parse request bodies on its own, and common parsers such as `koa-bodyparser` accept only `application/json`. `mastraJsonBodyParser()` is a dependency-free parser that also handles A2A Protocol v1.0 requests, which arrive as `application/a2a+json`. Without it, those requests fail with `Method not found: undefined`. Add the parser before creating the `MastraServer`. To keep `koa-bodyparser` instead, extend its accepted types to include `application/*+json`.
+
+:::
 
 ## Constructor parameters
 
@@ -124,7 +129,7 @@ The Koa adapter propagates errors from route handlers up through Koa's middlewar
 
 ```typescript title="server.ts"
 const app = new Koa()
-app.use(bodyParser())
+app.use(mastraJsonBodyParser())
 
 // Your error middleware catches errors from Mastra route handlers
 app.use(async (ctx, next) => {

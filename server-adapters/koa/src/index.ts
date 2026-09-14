@@ -19,6 +19,8 @@ import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
+export { mastraJsonBodyParser } from './json-body-middleware';
+export type { MastraJsonBodyParserOptions } from './json-body-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 type RegisteredKoaRoute = {
@@ -210,7 +212,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // Parse request context from request body (POST/PUT)
       if (ctx.method === 'POST' || ctx.method === 'PUT') {
         const contentType = ctx.headers['content-type'];
-        if (contentType?.includes('application/json') && ctx.request.body) {
+        if ((contentType?.includes('application/json') || contentType?.includes('+json')) && ctx.request.body) {
           const body = ctx.request.body as { requestContext?: Record<string, any> };
           if (body.requestContext) {
             bodyRequestContext = body.requestContext;

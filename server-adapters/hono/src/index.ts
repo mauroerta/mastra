@@ -42,6 +42,18 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   return _hasPermissionPromise;
 }
 
+/**
+ * Whether a request body should be parsed as JSON.
+ *
+ * Matches `application/json` plus any structured `+json` suffix media type (RFC 6839),
+ * e.g. the A2A v1 wire type `application/a2a+json`. Without the `+json` branch, v1 A2A
+ * requests would slip past the body parser and reach handlers with an empty body.
+ */
+function isJsonRequestBody(contentType: string | undefined | null): boolean {
+  if (!contentType) return false;
+  return contentType.includes('application/json') || contentType.includes('+json');
+}
+
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
   mastra: Mastra;
@@ -156,8 +168,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       if (c.req.method === 'POST' || c.req.method === 'PUT') {
         const contentType = c.req.header('content-type');
         const contentLength = c.req.header('content-length');
-        // Only parse if content-type is JSON and body is not empty
-        if (contentType?.includes('application/json') && contentLength !== '0') {
+        // Only parse if content-type is JSON (incl. +json suffixes) and body is not empty
+        if (isJsonRequestBody(contentType) && contentLength !== '0') {
           try {
             const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
@@ -313,7 +325,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
           };
         }
-      } else if (contentType.includes('application/json')) {
+      } else if (isJsonRequestBody(contentType)) {
         // Clone the request to read the body text first
         // This allows us to check if there's actual content before parsing
         const clonedReq = request.raw.clone();
@@ -775,7 +787,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Check FGA authorization (EE feature)
         let bodyParams: Record<string, unknown> = {};
         const contentType = c.req.header('content-type');
-        if (contentType?.includes('application/json')) {
+        if (isJsonRequestBody(contentType)) {
           try {
             const body = (await pristineRequest.clone().json()) as unknown;
             if (body && typeof body === 'object' && !Array.isArray(body)) {

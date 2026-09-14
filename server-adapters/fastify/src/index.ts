@@ -35,6 +35,16 @@ function loadHasPermission(): Promise<HasPermissionFn | undefined> {
 }
 
 /**
+ * Whether a request body should be treated as JSON. Accepts the literal `application/json`
+ * and any structured `+json` suffix media type (RFC 6839), e.g. the A2A v1 wire type
+ * `application/a2a+json`.
+ */
+function isJsonRequestBody(contentType: string | undefined | null): boolean {
+  if (!contentType) return false;
+  return contentType.includes('application/json') || contentType.includes('+json');
+}
+
+/**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
  */
 function toWebRequest(request: FastifyRequest): globalThis.Request {
@@ -88,7 +98,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Parse request context from request body (POST/PUT)
       if (request.method === 'POST' || request.method === 'PUT') {
         const contentType = request.headers['content-type'];
-        if (contentType?.includes('application/json') && request.body) {
+        if (isJsonRequestBody(contentType) && request.body) {
           const body = request.body as { requestContext?: Record<string, any> };
           if (body.requestContext) {
             bodyRequestContext = body.requestContext;
@@ -906,8 +916,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   registerContextMiddleware(): void {
     // Override the default JSON parser to allow empty bodies
     // This matches Express behavior where empty POST requests with Content-Type: application/json are allowed
-    this.app.removeContentTypeParser('application/json');
-    this.app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+    const parseJsonBody = (
+      _request: FastifyRequest,
+      body: string | Buffer,
+      done: (err: Error | null, body?: unknown) => void,
+    ) => {
       try {
         // Allow empty body
         if (!body || (typeof body === 'string' && body.trim() === '')) {
@@ -919,7 +932,13 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       } catch (err) {
         done(err as Error, undefined);
       }
-    });
+    };
+
+    this.app.removeContentTypeParser('application/json');
+    this.app.addContentTypeParser('application/json', { parseAs: 'string' }, parseJsonBody);
+    // Also parse structured `+json` suffix media types (RFC 6839), e.g. the A2A v1 wire type
+    // `application/a2a+json`. Without this, such requests reach handlers with an empty body.
+    this.app.addContentTypeParser(/^application\/([a-z0-9.-]+)\+json$/i, { parseAs: 'string' }, parseJsonBody);
 
     // Register content type parser for multipart/form-data
     // This allows Fastify to accept multipart requests without parsing them
